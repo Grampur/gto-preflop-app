@@ -11,90 +11,142 @@ const GTO_DATA = {
   "BU Iso v CO Limp": ["22+", "A2s+", "A2o+", "K2s+", "K5o+", "Q4s+", "Q8o+", "J5s+", "J8o+", "T5s+", "T7o+", "94s+", "96o+", "84s+", "85o+", "74s+", "75o+", "63s+", "64o+", "53s+", "54o", "43s", "32s"]
 };
 
-const positions = Object.keys(GTO_DATA);
+const RANKS = ['A', 'K', 'Q', 'J', 'T', '9', '8', '7', '6', '5', '4', '3', '2'];
 
-const RANK_ORDER = "23456789TJQKA";
-
-function parseHand(hand) {
-  // Example: 'AA', '76s', 'AJo'
-  let rank1 = hand[0];
-  let rank2 = hand[1];
-  let suited = hand.includes('s');
-  let offsuit = hand.includes('o');
-  return { rank1, rank2, suited, offsuit };
-}
-
-function handMatches(pattern, actual) {
-  if (pattern === actual) return true;
-
-  const actualHand = parseHand(actual);
-
-  if (pattern.endsWith('+')) {
-    const base = pattern.slice(0, -1);
-    const baseHand = parseHand(base);
-
-    // Pocket pairs, e.g. "77+"
-    if (baseHand.rank1 === baseHand.rank2) {
-      if (actualHand.rank1 === actualHand.rank2) {
-        return (
-          RANK_ORDER.indexOf(actualHand.rank1) >= RANK_ORDER.indexOf(baseHand.rank1)
-        );
-      }
-      return false;
-    }
-
-    // Non-pair combos e.g. "A5s+"
-    if (actualHand.suited !== baseHand.suited) return false;
-    if (actualHand.rank1 !== baseHand.rank1) return false;
-
-    return (
-      RANK_ORDER.indexOf(actualHand.rank2) >= RANK_ORDER.indexOf(baseHand.rank2)
-    );
-  }
-
-  return false;
+function getHandAction(hand, position, gtoData) {
+  const validHands = gtoData[position];
+  const isMatch = validHands.some(entry => handMatches(entry, hand));
+  return isMatch ? 'raise' : 'fold';
 }
 
 export default function App() {
   const [position, setPosition] = useState('EP RFI');
-  const [hand, setHand] = useState('');
-  const [action, setAction] = useState('');
 
-  const checkAction = () => {
-    const validHands = GTO_DATA[position];
-    const isMatch = validHands.some(entry => handMatches(entry, hand));
-    setAction(isMatch ? 'Raise' : 'Fold');
+  // Generate the grid cells
+  const renderGrid = () => {
+    return RANKS.map(row => (
+      <div key={row} style={{ display: 'flex' }}>
+        {RANKS.map(col => {
+          const isPair = row === col;
+          const hand = isPair ? `${row}${col}` : `${row}${col}s`;
+          const offSuitHand = `${row}${col}o`;
+          
+          let action;
+          if (isPair) {
+            action = getHandAction(`${row}${col}`, position, GTO_DATA);
+          } else {
+            // For non-pairs, check both suited and offsuit versions
+            const suitedAction = getHandAction(`${row}${col}s`, position, GTO_DATA);
+            const offSuitAction = getHandAction(`${row}${col}o`, position, GTO_DATA);
+            action = { suited: suitedAction, offsuit: offSuitAction };
+          }
+
+          return (
+            <div
+              key={`${row}${col}`}
+              style={{
+                width: '60px',
+                height: '60px',
+                border: '1px solid #333',
+                display: 'flex',
+                position: 'relative',
+              }}
+            >
+              {isPair ? (
+                // Render pair cell
+                <div style={{
+                  width: '100%',
+                  height: '100%',
+                  backgroundColor: action === 'raise' ? '#4CAF50' : '#f44336',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  color: 'white',
+                }}>
+                  {hand}
+                </div>
+              ) : (
+                // Render split cell for suited/offsuit
+                <>
+                  <div style={{
+                    width: '0',
+                    height: '0',
+                    borderStyle: 'solid',
+                    borderWidth: '60px 60px 0 0',
+                    borderColor: `${action.suited === 'raise' ? '#4CAF50' : '#f44336'} transparent transparent transparent`,
+                    position: 'absolute',
+                  }}/>
+                  <div style={{
+                    width: '0',
+                    height: '0',
+                    borderStyle: 'solid',
+                    borderWidth: '0 0 60px 60px',
+                    borderColor: `transparent transparent ${action.offsuit === 'raise' ? '#4CAF50' : '#f44336'} transparent`,
+                    position: 'absolute',
+                  }}/>
+                  <div style={{
+                    position: 'absolute',
+                    width: '100%',
+                    height: '100%',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    color: 'white',
+                    textShadow: '1px 1px 1px black',
+                    fontSize: '14px',
+                  }}>
+                    {row}{col}
+                  </div>
+                </>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    ));
   };
 
   return (
     <div style={{ background: '#1a1a1a', minHeight: '100vh', padding: '2rem', color: 'white' }}>
-      <h1 style={{ fontSize: '1.5rem', marginBottom: '1rem' }}>GTO Preflop Lookup</h1>
-
+      <h1 style={{ fontSize: '1.5rem', marginBottom: '1rem' }}>GTO Preflop Grid</h1>
+      
       <div>
-        <label>Position:</label>
-        <select value={position} onChange={(e) => setPosition(e.target.value)}>
-          {positions.map(pos => (
+        <label>Position: </label>
+        <select 
+          value={position} 
+          onChange={(e) => setPosition(e.target.value)}
+          style={{ marginBottom: '1rem' }}
+        >
+          {Object.keys(GTO_DATA).map(pos => (
             <option key={pos} value={pos}>{pos}</option>
           ))}
         </select>
       </div>
 
-      <div style={{ marginTop: '1rem' }}>
-        <label>Hand (e.g., AKo, 76s):</label>
-        <input
-          value={hand}
-          onChange={(e) => setHand(e.target.value.toUpperCase())}
-          placeholder="e.g. AA, AKo, 76s"
-        />
+      <div style={{ 
+        display: 'flex', 
+        flexDirection: 'column',
+        gap: '1px',
+        backgroundColor: '#333',
+        padding: '1px',
+        width: 'fit-content'
+      }}>
+        {renderGrid()}
       </div>
 
-      <button style={{ marginTop: '1rem' }} onClick={checkAction}>Check GTO Action</button>
-
-      {action && (
-        <div style={{ marginTop: '1rem', fontSize: '1.25rem' }}>
-          Action: <span style={{ color: action === 'Raise' ? 'lightgreen' : 'red' }}>{action}</span>
+      <div style={{ marginTop: '1rem' }}>
+        <p>Color Legend:</p>
+        <div style={{ display: 'flex', gap: '1rem', marginTop: '0.5rem' }}>
+          <div style={{ display: 'flex', alignItems: 'center' }}>
+            <div style={{ width: '20px', height: '20px', backgroundColor: '#4CAF50', marginRight: '0.5rem' }}></div>
+            <span>Raise</span>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center' }}>
+            <div style={{ width: '20px', height: '20px', backgroundColor: '#f44336', marginRight: '0.5rem' }}></div>
+            <span>Fold</span>
+          </div>
         </div>
-      )}
+      </div>
     </div>
   );
 }
