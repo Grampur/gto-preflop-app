@@ -13,6 +13,51 @@ const GTO_DATA = {
 
 const RANKS = ['A', 'K', 'Q', 'J', 'T', '9', '8', '7', '6', '5', '4', '3', '2'];
 
+// Add this function to handle hand matching
+function handMatches(pattern, hand) {
+  // Handle exact matches
+  if (pattern === hand) return true;
+
+  // Handle plus ranges like "77+" or "A5s+"
+  if (pattern.endsWith('+')) {
+    const baseHand = pattern.slice(0, -1);
+    
+    // Handle pair ranges (like "77+")
+    if (baseHand.length === 2 && baseHand[0] === baseHand[1]) {
+      const pairRank = RANKS.indexOf(baseHand[0]);
+      const handRank = RANKS.indexOf(hand[0]);
+      return hand[0] === hand[1] && handRank <= pairRank;
+    }
+    
+    // Handle suited and offsuit hands with plus (like "A5s+" or "AJo+")
+    if (baseHand.length === 3) { // Including 's' or 'o' at the end
+      const baseFirstCard = baseHand[0];
+      const baseSecondCard = baseHand[1];
+      const baseType = baseHand[2]; // 's' or 'o'
+      
+      // Extract components of the actual hand
+      const handFirstCard = hand[0];
+      const handSecondCard = hand[1];
+      const handType = hand[2]; // 's' or 'o'
+      
+      // Check if hand type matches (suited vs offsuit)
+      if (handType !== baseType) return false;
+      
+      // Check if first card matches
+      if (handFirstCard !== baseFirstCard) return false;
+      
+      // Compare second card ranks
+      const baseSecondRank = RANKS.indexOf(baseSecondCard);
+      const handSecondRank = RANKS.indexOf(handSecondCard);
+      
+      // For hands like "A5s+", return true if the second card is 5 or higher
+      return handSecondRank <= baseSecondRank;
+    }
+  }
+
+  return false;
+}
+
 function getHandAction(hand, position, gtoData) {
   const validHands = gtoData[position];
   const isMatch = validHands.some(entry => handMatches(entry, hand));
@@ -23,88 +68,64 @@ export default function App() {
   const [position, setPosition] = useState('EP RFI');
 
   // Generate the grid cells
-  const renderGrid = () => {
-    return RANKS.map(row => (
-      <div key={row} style={{ display: 'flex' }}>
-        {RANKS.map(col => {
-          const isPair = row === col;
-          const hand = isPair ? `${row}${col}` : `${row}${col}s`;
-          const offSuitHand = `${row}${col}o`;
-          
-          let action;
-          if (isPair) {
-            action = getHandAction(`${row}${col}`, position, GTO_DATA);
-          } else {
-            // For non-pairs, check both suited and offsuit versions
-            const suitedAction = getHandAction(`${row}${col}s`, position, GTO_DATA);
-            const offSuitAction = getHandAction(`${row}${col}o`, position, GTO_DATA);
-            action = { suited: suitedAction, offsuit: offSuitAction };
-          }
+const renderGrid = () => {
+  return RANKS.map((row, rowIndex) => (
+    <div key={row} style={{ display: 'flex' }}>
+      {RANKS.map((col, colIndex) => {
+        const isPair = row === col;
+        const isAboveMiddle = rowIndex < colIndex;
+        
+        // Always keep higher rank first for both suited and offsuit hands
+        const [higherCard, lowerCard] = [row, col].sort((a, b) => 
+          RANKS.indexOf(a) - RANKS.indexOf(b)
+        );
+        
+        // Create hand strings with correct orientation and order
+        const suitedHand = `${higherCard}${lowerCard}s`;
+        const offSuitHand = `${higherCard}${lowerCard}o`;
+        
+        let action;
+        if (isPair) {
+          action = getHandAction(`${row}${col}`, position, GTO_DATA);
+        } else {
+          // Check both suited and offsuit versions
+          const suitedAction = getHandAction(suitedHand, position, GTO_DATA);
+          const offSuitAction = getHandAction(offSuitHand, position, GTO_DATA);
+          action = rowIndex < colIndex 
+            ? suitedAction  // Above middle line - suited
+            : offSuitAction; // Below middle line - offsuit
+        }
 
-          return (
-            <div
-              key={`${row}${col}`}
-              style={{
-                width: '60px',
-                height: '60px',
-                border: '1px solid #333',
-                display: 'flex',
-                position: 'relative',
-              }}
-            >
-              {isPair ? (
-                // Render pair cell
-                <div style={{
-                  width: '100%',
-                  height: '100%',
-                  backgroundColor: action === 'raise' ? '#4CAF50' : '#f44336',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  color: 'white',
-                }}>
-                  {hand}
-                </div>
-              ) : (
-                // Render split cell for suited/offsuit
-                <>
-                  <div style={{
-                    width: '0',
-                    height: '0',
-                    borderStyle: 'solid',
-                    borderWidth: '60px 60px 0 0',
-                    borderColor: `${action.suited === 'raise' ? '#4CAF50' : '#f44336'} transparent transparent transparent`,
-                    position: 'absolute',
-                  }}/>
-                  <div style={{
-                    width: '0',
-                    height: '0',
-                    borderStyle: 'solid',
-                    borderWidth: '0 0 60px 60px',
-                    borderColor: `transparent transparent ${action.offsuit === 'raise' ? '#4CAF50' : '#f44336'} transparent`,
-                    position: 'absolute',
-                  }}/>
-                  <div style={{
-                    position: 'absolute',
-                    width: '100%',
-                    height: '100%',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    color: 'white',
-                    textShadow: '1px 1px 1px black',
-                    fontSize: '14px',
-                  }}>
-                    {row}{col}
-                  </div>
-                </>
-              )}
-            </div>
-          );
-        })}
-      </div>
-    ));
-  };
+        return (
+          <div
+            key={`${row}${col}`}
+            style={{
+              width: '60px',
+              height: '60px',
+              border: '1px solid #333',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              backgroundColor: action === 'raise' ? '#4CAF50' : '#f44336',
+              color: 'white',
+              position: 'relative',
+            }}
+          >
+            {isPair ? (
+              // Render pair cell
+              `${row}${col}`
+            ) : (
+              // Render suited/offsuit hands with correct order
+              <>
+                {isAboveMiddle ? suitedHand : offSuitHand}
+              </>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  ));
+};
 
   return (
     <div style={{ background: '#1a1a1a', minHeight: '100vh', padding: '2rem', color: 'white' }}>
